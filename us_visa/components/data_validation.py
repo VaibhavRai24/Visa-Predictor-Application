@@ -1,9 +1,11 @@
 import json
 import sys
+import os
 
 import pandas as pd
 from evidently.report import Report
-from evidently.metric_preset import DataDriftPreset
+from evidently.model_profile import Profile
+from evidently.model_profile.sections import DataDriftProfileSection
 
 from pandas import DataFrame
 from us_visa.exception import MyException
@@ -93,15 +95,16 @@ class DataValidation:
         On Failure  :   Write an exception log and then raise an exception
         """
         try:
-            data_drift_profile = Report(sections = [DataDriftPreset()])
+            data_drift_profile = Profile(sections=[DataDriftProfileSection()])
             data_drift_profile.calculate(refrenced_df, current_df)
             
             report = data_drift_profile.json()
             json_report = json.loads(report)
+            os.makedirs(os.path.dirname(self.data_validation_config.drift_report_file_path), exist_ok=True)
             
             write_yaml_file(file_path= self.data_validation_config.drift_report_file_path, content= json_report)
             
-            n_features = json_report["data_drift"]["data"]["metrices"]["n_features"]
+            n_features = json_report["data_drift"]["data"]["metrics"]["n_features"]
             n_drifted_features = json_report["data_drift"]["data"]["metrics"]["n_drifted_features"]
             
             logging.info(f"{n_drifted_features}/{n_features} drift detected.")
@@ -120,15 +123,19 @@ class DataValidation:
         On Failure  :   Write an exception log and then raise an exception
         """
         try:
-            validation_error_message  =" "
+            validation_error_message  =""
             logging.info("Starting the data Validation___________>>>>>>>>>>")
-            train_df, test_df = (DataValidation.read_data(file_path= self.data_ingestion_artifact.training_file_path),
-                                                          DataValidation.read_data(file_path=self.data_ingestion_artifact.test_file_path))
+            train_df, test_df = (DataValidation.read_data(file_path= self.data_ingestion_artifact.training_file_path), DataValidation.read_data(file_path=self.data_ingestion_artifact.test_file_path))
             
             status = self.validate_number_of_columns(dataframe= train_df)
             logging.info(f"All required columns present in the training dataframe: {status}")
             if not status:
                 validation_error_message += f"Columns are missing in the dataframe.."
+                
+            status =self.validate_number_of_columns(dataframe= test_df)
+            logging.info(f" all required columns are present in the testing dataframe:{status}")
+            if not status:
+                validation_error_message += f"Columns are missing in the test dataframe"
                 
             status = self.is_columns_exist(df = train_df)
             if not status:
@@ -139,12 +146,12 @@ class DataValidation:
                 validation_error_message +=  f" Columns are missing in the dataframe"
                 
                 
-            validation_status = len(validation_error_message) ==0
+            validation_status = len(validation_error_message) == 0
             
             if validation_status:
                 drift_status = self.detect_dataset_drift(train_df, test_df)
                 if drift_status:
-                    logging.info("Drift detected")
+                    logging.info(f"Drift detected")
                     validation_error_message = "Drift has been detected"
                 else:
                     validation_error_message = "Drift not detected"
@@ -163,4 +170,4 @@ class DataValidation:
             return data_validation_artifact
         
         except Exception as e:
-            raise MyException(e, sys)
+            raise MyException(e, sys) from e

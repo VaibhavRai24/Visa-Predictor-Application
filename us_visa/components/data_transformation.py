@@ -104,7 +104,7 @@ class DataTransformation:
                 test_df = DataTransformation.read_data(file_path= self.data_ingestion_artifact.test_file_path)
                 
                 input_feature_train_df = train_df.drop(columns= [TARGET_COLUMN], axis= 1)
-                target_feature_train_df = test_df[TARGET_COLUMN]
+                target_feature_train_df = train_df[TARGET_COLUMN]
                 
                 logging.info("Got the train and test features of Training dataset")
                 
